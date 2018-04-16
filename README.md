@@ -22,6 +22,13 @@ and scenes with a GUI using GLFW/OpenGL. There is also planned the Vulkan glTF2
 (gltf2vulkan) loader and viewer (gltf2vulkanviewer), along with an experimental
 global illumination viewer (gltf2giviewer).
 
+
+                                      -> OpenGL (GL_glTF2)--> OpenGL Apps (OpenGLViewer)
+                                     /
+(json file) -> (JSON_glTF) -> (glTF2) -> Vulkan (VK_glTF2)--> Vulkan Apps (VulkanViewer)
+                                     \
+                                      -> etc (API_glTF2)----> other API apps
+
 The goal right now is to load & view all glTF2 sample models in OpenGL from
   https://github.com/KhronosGroup/glTF-Sample-Models/tree/master/2.0/
 
