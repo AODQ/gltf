@@ -32,6 +32,7 @@ The following is a list of working models with an implementation quality from *
 
   "Triangle Without Indices" ........... **
   "Triangle" ........................... **
-  "Box" ................................ *
+  "Box" ................................ **
+  "BoxInterleaved" ..................... **
   "Suzanne" ............................ *
   "SciFiHelmet" ........................ *

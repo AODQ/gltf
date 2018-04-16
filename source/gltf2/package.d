@@ -65,6 +65,7 @@ auto glTFComponentType_Info ( glTFComponentType type ) {
 }
 
 enum glTFBufferViewTarget {
+  NonGPU = 0,
   Array = 34962,
   ElementArray = 34963
 };
