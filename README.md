@@ -33,5 +33,6 @@ The following is a list of working models with an implementation quality from *
     "Suzanne" ............................ *
     "SciFiHelmet" ........................ *
     
-Media
+# Media
+
 ![](https://github.com/AODQ/gltf2/blob/master/media/suzeanneworking.gif)
