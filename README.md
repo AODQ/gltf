@@ -3,10 +3,6 @@
 glTF2 is a specification by Khronos for transmitting and loading 3D scenes and
 models for applications. Read more: https://github.com/KhronosGroup/glTF
 
-The major benefit is that it allows for scenes and models to be used seamlessly
-throughout multiple applications, mitigating the use for what was once a task
-for in-house libraries.
-
 This is planned to be a complete implementation of the glTF2 specification,
 with support for all future Khronos extensions. This repository is the core
 glTF2 implementation, which includes features such as:
