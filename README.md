@@ -6,9 +6,9 @@ models for applications. Read more: https://github.com/KhronosGroup/glTF
 This is planned to be a complete implementation of the glTF2 specification,
 with support for all future Khronos extensions. This repository is the core
 glTF2 implementation, which includes features such as:
-  glTF2 validation
-  Loading of glTF, binary and embedded formats
-  A simple layer on top of JSON, replacing array indices with pointers
+  * Validation
+  * Loading multiple formats (standard, binary, embedded)
+  * A simple layer on top of JSON structs
 
 The idea is to give a core glTF2 implemention in which graphics APIs may be
 built on top of. There are plans for loaders and viewers for both OpenGL
