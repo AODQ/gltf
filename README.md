@@ -15,13 +15,10 @@ glTF2 implementation, which includes features such as:
   A simple layer on top of JSON, replacing array indices with pointers
 
 The idea is to give a core glTF2 implemention in which graphics APIs may be
-built on top of. Right now, the OpenGL glTF2 (gltf2opengl) loader is in
-development, loading all the glTF2 data using OpenGL3.3. There is also the
-OpenGL glTF2 Viewer (gltf2openglviewer) which can be used to view glTF2 models
-and scenes with a GUI using GLFW/OpenGL. There is also planned the Vulkan glTF2
-(gltf2vulkan) loader and viewer (gltf2vulkanviewer), along with an experimental
-global illumination viewer (gltf2giviewer).
+built on top of. There are plans for loaders and viewers for both OpenGL
+and Vulkan, along with possibly an experimental Global Illumination viewer.
 
+![](https://github.com/AODQ/gltf2/blob/master/media/glTF2-api-spec-0.png?raw=true)
 
 The goal right now is to load & view all glTF2 sample models in OpenGL from
   https://github.com/KhronosGroup/glTF-Sample-Models/tree/master/2.0/
@@ -30,8 +27,11 @@ The following is a list of working models with an implementation quality from *
   to *** when compared to their reference screenshot:
 
 
-  "Triangle Without Indices" ........... **
-  "Triangle" ........................... **
-  "Box" ................................ *
-  "Suzanne" ............................ *
-  "SciFiHelmet" ........................ *
+    "Triangle Without Indices" ........... **
+    "Triangle" ........................... **
+    "Box" ................................ *
+    "Suzanne" ............................ *
+    "SciFiHelmet" ........................ *
+    
+Media
+![](https://github.com/AODQ/gltf2/blob/master/media/suzeanneworking.gif)
