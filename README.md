@@ -14,6 +14,12 @@ The idea is to give a core glTF2 implemention in which graphics APIs may be
 built on top of. There are plans for loaders and viewers for both OpenGL
 and Vulkan, along with possibly an experimental Global Illumination viewer.
 
+Base glTF2:    https://github.com/AODQ/gltf2
+OpenGL Loader: https://github.com/AODQ/gltf2-opengl
+OpenGL Viewer:
+Vulkan Loader:
+Vulkan Viewer:
+
 ![](https://github.com/AODQ/gltf2/blob/master/media/glTF2-api-spec-0.png?raw=true)
 
 The goal right now is to load & view all glTF2 sample models in OpenGL from
