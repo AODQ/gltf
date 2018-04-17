@@ -14,7 +14,13 @@ The idea is to give a core glTF2 implemention in which graphics APIs may be
 built on top of. There are plans for loaders and viewers for both OpenGL
 and Vulkan, along with possibly an experimental Global Illumination viewer.
 
-![](https://github.com/AODQ/gltf2/blob/master/media/glTF2-api-spec-0.png?raw=true)
+ * [Base glTF2](https://github.com/AODQ/gltf)
+ * [OpenGL Loader](https://github.com/AODQ/gltf-opengl)
+ * [OpenGL Viewer](https://github.com/AODQ/gltf-opengl-viewer)
+ * Vulkan Loader: WIP
+ * Vulkan Viewer: WIP
+
+![](https://github.com/AODQ/gltf/blob/master/media/glTF2-api-spec-0.png?raw=true)
 
 The goal right now is to load & view all glTF2 sample models in OpenGL from
   https://github.com/KhronosGroup/glTF-Sample-Models/tree/master/2.0/
@@ -29,5 +35,4 @@ The following is a list of working models with an implementation quality from *
     "Suzanne" ............................ *
     "SciFiHelmet" ........................ *
 
-![](https://github.com/AODQ/gltf2/blob/master/media/suzeanneworking.gif)
->>>>>>> ddf3225b9c8f9ce9be29721c2f42fd5403a7ba45
+![](https://github.com/AODQ/gltf/blob/master/media/suzeanneworking.gif)
