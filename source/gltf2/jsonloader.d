@@ -132,10 +132,14 @@ struct JSON_glTFImageInfo {
 // ----- material --------------------------------------------------------------
 struct JSON_glTFMaterialPBRMetallicRoughnessInfo {
   mixin JSON_glTFTemplate!false;
-  float[] baseColorFactor = [1f, 1f, 1f, 1f];
+  float[] baseColorFactor = []; // TODO; better check if this exists
   JSON_glTFMaterialTextureInfo baseColorTexture;
   JSON_glTFMaterialTextureInfo metallicRoughnessTexture;
   float metallicFactor = 1.0f, roughnessFactor = 1.0f;
+
+  bool Exists ( ) {
+    return baseColorFactor.length != 0;
+  }
 }
 struct JSON_glTFMaterialNormalTextureInfo {
   mixin JSON_glTFTemplate!false;

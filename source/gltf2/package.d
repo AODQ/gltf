@@ -6,6 +6,7 @@ import std.exception;
 import std.algorithm, std.range;
 import std.file : exists;
 import std.stdio;
+import std.variant;
 import std.string;
 import std.traits;
 import std.conv;
@@ -46,6 +47,18 @@ glTFType To_glTFType ( string u ) {
   }
 }
 
+enum glTFFilterType {
+  Nearest = 9728, Linear = 9729,
+  NearestMipmapNearest = 9984,
+  LinearMipmapNearest = 9985,
+  NearestMipmapLinear = 9986,
+  LinearMipmapLinear = 9987
+}
+enum glTFWrapType {
+  ClampToEdge = 33071,
+  MirroredRepeat = 33648,
+  Repeat = 10497
+}
 enum glTFComponentType {
   Byte=5120, Ubyte=5121, Short=5122, Ushort=5123, Int=5124, Uint=5125,
   Float=5126
@@ -232,18 +245,39 @@ struct glTFCamera {
 // ----- image -----------------------------------------------------------------
 struct glTFImage {
   mixin glTFTemplate!JSON_glTFImageInfo;
+  ubyte[] raw_data; // RGBA
+  uint width, height;
 
-  this ( uint idx, glTFObject data, ref JSON_glTFImageInfo img_info ) {
-    Template_Construct(idx, img_info);
+  this ( uint idx, glTFObject data, ref JSON_glTFImageInfo info ) {
+    Template_Construct(idx, info);
+    import imageformats;
+    auto img = read_image(data.repository ~ info.uri);
+    raw_data = img.pixels;
+    width = img.w; height = img.h;
   }
 }
 
 // ----- material --------------------------------------------------------------
+struct glTFMaterialPBRMetallicRoughness {
+  float[] colour_factor;
+  float metallic_factor, roughness_factor;
+
+  this ( JSON_glTFMaterialPBRMetallicRoughnessInfo info ) {
+    colour_factor = info.baseColorFactor;
+    metallic_factor = info.metallicFactor;
+    roughness_factor = info.roughnessFactor;
+  }
+}
+struct glTFMaterialNil { }
 struct glTFMaterial {
   mixin glTFTemplate!JSON_glTFMaterialInfo;
+  Algebraic!(glTFMaterialPBRMetallicRoughness, glTFMaterialNil) material;
 
-  this ( uint idx, glTFObject data, ref JSON_glTFMaterialInfo mat_info ) {
-    Template_Construct(idx, mat_info);
+  this ( uint idx, glTFObject data, ref JSON_glTFMaterialInfo info ) {
+    Template_Construct(idx, info);
+    material = glTFMaterialNil();
+    if ( info.pbrMetallicRoughness.Exists )
+      material = glTFMaterialPBRMetallicRoughness(info.pbrMetallicRoughness);
   }
 }
 
@@ -251,7 +285,7 @@ struct glTFMaterial {
 struct glTFPrimitive {
   mixin glTFTemplate!JSON_glTFMeshPrimitiveInfo;
   private glTFAccessor*[glTFAttribute] accessors;
-  glTFMaterial material;
+  glTFMaterial* material;
   glTFMode mode;
 
   private void Set_Accessor(glTFObject data, glTFAttribute atr, int idx) {
@@ -272,6 +306,7 @@ struct glTFPrimitive {
     Set_Accessor(data, glTFAttribute.Position, atr.POSITION);
     Set_Accessor(data, glTFAttribute.Normal, atr.NORMAL);
     mode = cast(glTFMode)pri_info.mode;
+    if ( pri_info.material >= 0 ) material = &data.materials[pri_info.material];
   }
 }
 struct glTFMesh {
@@ -334,9 +369,15 @@ struct glTFNode {
 // ----- sampler ---------------------------------------------------------------
 struct glTFSampler {
   mixin glTFTemplate!JSON_glTFSamplerInfo;
+  glTFFilterType min_filter, mag_filter;
+  glTFWrapType wrap_s, wrap_t;
 
-  this ( uint idx, glTFObject obj, ref JSON_glTFSamplerInfo smp_info ) {
-    Template_Construct(idx, smp_info);
+  this ( uint idx, glTFObject obj, ref JSON_glTFSamplerInfo info ) {
+    Template_Construct(idx, info);
+    min_filter = cast(glTFFilterType)info.minFilter;
+    mag_filter = cast(glTFFilterType)info.magFilter;
+    wrap_s = cast(glTFWrapType)info.wrapS;
+    wrap_t = cast(glTFWrapType)info.wrapT;
   }
 }
 
@@ -365,9 +406,13 @@ struct glTFSkin {
 // ----- texture ---------------------------------------------------------------
 struct glTFTexture {
   mixin glTFTemplate!JSON_glTFTextureInfo;
+  glTFImage* image;
+  glTFSampler* sampler;
 
   this ( uint idx, glTFObject obj, ref JSON_glTFTextureInfo tex_info ) {
     Template_Construct(idx, tex_info);
+    image = &obj.images[tex_info.source];
+    sampler = &obj.samplers[tex_info.sampler];
   }
 }
 
