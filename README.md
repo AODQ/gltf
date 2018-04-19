@@ -32,7 +32,8 @@ The following is a list of working models with an implementation quality from *
     "Triangle" ........................... **
     "Box" ................................ **
     "BoxInterleaved" ..................... **
+    "BoxTextured" ........................ **
+    "BoxTexturedNonPowerOfTwo" ........... **
+    "BoxVertexColors" .................... **
     "Suzanne" ............................ *
     "SciFiHelmet" ........................ *
-
-![](https://github.com/AODQ/gltf/blob/master/media/suzeanneworking.gif)
