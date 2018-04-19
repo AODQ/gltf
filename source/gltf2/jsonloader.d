@@ -13,7 +13,7 @@ private template JSON_glTFTemplate ( bool Has_name = true ) {
 }
 
 // ----- glTF (root object) ----------------------------------------------------
-struct JSON_glTFFileInfo {
+struct JSON_glTFConstructor {
   mixin JSON_glTFTemplate!false;
   string[] extensionsUsed, extensionsRequired;
   JSON_glTFAccessorInfo   []   accessors;
@@ -238,9 +238,7 @@ struct JSON_glTFTextureInfo {
 
 // ----- texture info ----------------------------------------------------------
 
-JSON_glTFFileInfo Load_JSON_glTFFileInfo(string gltf_file) {
+JSON_glTFConstructor Load_JSON_glTFFileInfo(string gltf_file) {
   import std.file, std.conv, std.string;
-  JSON_glTFFileInfo info =
-    jsonDecode!JSON_glTFFileInfo(gltf_file.read.to!string.strip);
-  return info;
+  return jsonDecode!JSON_glTFConstructor(gltf_file.read.to!string.strip);
 }

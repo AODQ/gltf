@@ -104,85 +104,42 @@ private template glTFTemplate ( JSON_Base ) {
 
 
 // ----- glTF (root object) ----------------------------------------------------
-class glTFObject {
-  // no json info
-  string repository;
-  string[] extensions_used, extensions_required;
-  uint scene;
-
-  glTFAsset                asset;
-  glTFAccessor   []    accessors;
-  glTFAnimation  []   animations;
-  glTFBuffer     []      buffers;
-  glTFBufferView [] buffer_views;
-  glTFImage      []       images;
-  glTFMaterial   []    materials;
-  glTFMesh       []       meshes;
-  glTFNode       []        nodes;
-  glTFSampler    []     samplers;
-  glTFScene      []       scenes;
-  glTFSkin       []        skins;
-  glTFTexture    []     textures;
-
-  private void Fill_Buff(T, U)(ref T[] buff, ref U[] js) {
-    iota(0, js.length).each!((i) { buff[i] = T(cast(uint)i, this, js[i]); });
+void glTFConstructor(RObj, JObj)(ref RObj rootobj, ref JObj jobj) {
+  void Fill_Subbuffer(U, T)(ref T[] buff) {
+    foreach ( ref mem; buff ) mem.gltf_data = U(rootobj, mem);
   }
 
-  this ( string _repository, JSON_glTFFileInfo info ) {
-    // load asset/misc info
-    repository = _repository;
-    extensions_used = info.extensionsUsed;
-    extensions_required = info.extensionsRequired;
-    asset = glTFAsset(this, info.asset);
-
-    // set buffer lengths
-    accessors.length    = info.accessors.length;
-    animations.length   = info.animations.length;
-    buffers.length      = info.buffers.length;
-    buffer_views.length = info.bufferViews.length;
-    images.length       = info.images.length;
-    materials.length    = info.materials.length;
-    meshes.length       = info.meshes.length;
-    nodes.length        = info.nodes.length;
-    samplers.length     = info.samplers.length;
-    scenes.length       = info.scenes.length;
-    skins.length        = info.skins.length;
-    textures.length     = info.textures.length;
-
-    // create glTF buffers from JSON data
-    Fill_Buff(accessors,    info.accessors);
-    Fill_Buff(animations,   info.animations);
-    Fill_Buff(buffers,      info.buffers);
-    Fill_Buff(buffer_views, info.bufferViews);
-    Fill_Buff(images,       info.images);
-    Fill_Buff(materials,    info.materials);
-    Fill_Buff(meshes,       info.meshes);
-    Fill_Buff(nodes,        info.nodes);
-    Fill_Buff(samplers,     info.samplers);
-    Fill_Buff(scenes,       info.scenes);
-    Fill_Buff(skins,        info.skins);
-    Fill_Buff(textures,     info.textures);
-  }
+  Fill_Subbuffer!glTFAccessor(rootobj.accessors);
+  Fill_Subbuffer!glTFAnimation(rootobj.animation);
+  Fill_Subbuffer!glTFBuffer(rootobj.buffer);
+  Fill_Subbuffer!glTFBufferView(rootobj.buffer_view);
+  Fill_Subbuffer!glTFImage(rootobj.image);
+  Fill_Subbuffer!glTFMaterial(rootobj.material);
+  Fill_Subbuffer!glTFMesh(rootobj.mesh);
+  Fill_Subbuffer!glTFNode(rootobj.node);
+  Fill_Subbuffer!glTFSampler(rootobj.sampler);
+  Fill_Subbuffer!glTFScene(rootobj.scene);
+  Fill_Subbuffer!glTFSkin(rootobj.skin);
+  Fill_Subbuffer!glTFTexture(rootobj.texture);
 }
 
 // ----- accessor --------------------------------------------------------------
 struct glTFAccessor {
   mixin glTFTemplate!JSON_glTFAccessorInfo;
-  glTFBufferView* buffer_view;
   uint count, offset;
   glTFType type;
   glTFComponentType component_type;
   JsonValue max, min;
 
-  this ( uint idx, glTFObject data, ref JSON_glTFAccessorInfo acc_info ) {
-    Template_Construct(idx, acc_info);
-    count = acc_info.count;
-    offset = acc_info.byteOffset;
-    type = To_glTFType(acc_info.type);
-    component_type = Scalar_To_glTFComponentType(acc_info.componentType);
-    buffer_view = &data.buffer_views[acc_info.bufferView];
-    max = acc_info.max;
-    min = acc_info.min;
+  this(RObj, RSubobj)(RObj obj, RSubobj sobj) {
+    Template_Construct(idx, sobj.json_data);
+    auto jdata = &sobj.json_data;
+    count = jdata.count;
+    offset = jdata.byteOffset;
+    type = To_glTFType(jdata.type);
+    component_type = Scalar_To_glTFComponentType(jdata.componentType);
+    max = jdata.max;
+    min = jdata.min;
   }
 }
 
