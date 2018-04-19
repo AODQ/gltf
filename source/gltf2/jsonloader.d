@@ -130,6 +130,12 @@ struct JSON_glTFImageInfo {
 }
 
 // ----- material --------------------------------------------------------------
+struct JSON_glTFMaterialTextureInfo {
+  mixin JSON_glTFTemplate!false;
+  uint index = -1, texCoord = 0;
+
+  bool Exists ( ) { return index != -1; }
+}
 struct JSON_glTFMaterialPBRMetallicRoughnessInfo {
   mixin JSON_glTFTemplate!false;
   float[] baseColorFactor = []; // TODO; better check if this exists
@@ -138,8 +144,11 @@ struct JSON_glTFMaterialPBRMetallicRoughnessInfo {
   float metallicFactor = 1.0f, roughnessFactor = 1.0f;
 
   bool Exists ( ) {
-    return baseColorFactor.length != 0;
+    return baseColorFactor.length != 0 ||
+           baseColorTexture.Exists;
   }
+
+  bool Has_Base_Colour_Texture ( ) { return baseColorTexture.index != -1; }
 }
 struct JSON_glTFMaterialNormalTextureInfo {
   mixin JSON_glTFTemplate!false;
@@ -180,6 +189,7 @@ struct JSON_glTFMeshPrimitiveInfo {
   JSON_glTFMeshPrimitiveTypeInfo[] targets;
   uint mode = 4;
   uint indices = -1, material = -1;
+  bool Has_Material ( ) { return material != -1; }
 }
 struct JSON_glTFMeshInfo {
   mixin JSON_glTFTemplate;
@@ -222,14 +232,11 @@ struct JSON_glTFSkinInfo {
 // ----- texture ---------------------------------------------------------------
 struct JSON_glTFTextureInfo {
   mixin JSON_glTFTemplate;
-  uint sampler, source;
+  uint sampler = -1, source;
+  bool Has_Sampler ( ) { return sampler != -1; }
 }
 
 // ----- texture info ----------------------------------------------------------
-struct JSON_glTFMaterialTextureInfo {
-  mixin JSON_glTFTemplate!false;
-  uint index = -1, texCoord = 0;
-}
 
 JSON_glTFFileInfo Load_JSON_glTFFileInfo(string gltf_file) {
   import std.file, std.conv, std.string;

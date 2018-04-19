@@ -21,7 +21,7 @@ private T To_glTFEnum(T)(ulong mem) {
   return cast(T)mem;
 }
 enum glTFAssetType { Scene, Library };
-enum glTFAttribute { Index, Normal, Position };
+enum glTFAttribute { Index, Normal, Position, TexCoord0 = 10, Colour0 = 20 };
 enum glTFMode { Points = 0, Lines = 1, LineLoop = 2, LineStrip = 3,
                 Triangles = 4, TriangleStrip = 5, TriangleFan = 6 };
 auto glTFMode_Info ( glTFMode mode ) {
@@ -248,24 +248,80 @@ struct glTFImage {
   ubyte[] raw_data; // RGBA
   uint width, height;
 
+  int NPOT ( uint w ) {
+    -- w;
+    w |= w >> 1;
+    w |= w >> 2;
+    w |= w >> 4;
+    w |= w >> 8;
+    w |= w >> 16;
+    return w + 1;
+  }
+
   this ( uint idx, glTFObject data, ref JSON_glTFImageInfo info ) {
     Template_Construct(idx, info);
     import imageformats;
     auto img = read_image(data.repository ~ info.uri);
     raw_data = img.pixels;
     width = img.w; height = img.h;
+
+    // check if have to scale to power of 2
+    uint nwidth = width, nheight = height;
+    if ( (nwidth&(nwidth-1)) != 0 ) nwidth = NPOT(nwidth);
+    if ( (nheight&(nheight-1)) != 0 ) nheight = NPOT(nheight);
+    if ( nwidth == width && nheight == height ) return; // not necessary
+    ubyte[] ndata;
+    ndata.length = nwidth*nheight*4;
+
+    bool has_alpha = img.c == ColFmt.RGBA;
+    uint offset = has_alpha ? 4 : 3;
+
+    // copy data over using lerp
+    foreach ( i; 0 .. nwidth )
+    foreach ( j; 0 .. nheight ) {
+      float wlerp = i/cast(float)nwidth,
+            hlerp = j/cast(float)nheight;
+      int W = cast(int)(wlerp*width), H = cast(int)(hlerp*height);
+      uint nidx = (i+j*nwidth)*4, ridx = (W+H*width)*offset;
+      ndata[nidx .. nidx+3] = raw_data[ridx .. ridx+3];
+      if ( has_alpha ) ndata[nidx+3] = raw_data[ridx+3];
+      else             ndata[nidx+3] = 255;
+    }
+
+
+    width = nwidth; height = nheight;
+    raw_data = ndata;
   }
 }
 
 // ----- material --------------------------------------------------------------
+struct glTFMaterialTexture {
+  mixin glTFTemplate!JSON_glTFMaterialTextureInfo;
+  glTFTexture* texture;
+
+  this ( glTFObject obj, ref JSON_glTFMaterialTextureInfo mat_info ) {
+    Template_Construct(0, mat_info);
+    texture = &obj.textures[mat_info.index];
+  }
+
+  bool Exists ( ) { return texture !is null; }
+}
 struct glTFMaterialPBRMetallicRoughness {
   float[] colour_factor;
   float metallic_factor, roughness_factor;
+  glTFMaterialTexture base_colour_texture;
 
-  this ( JSON_glTFMaterialPBRMetallicRoughnessInfo info ) {
+  bool Has_Base_Colour_Texture ( ) {
+    return base_colour_texture.Exists;
+  }
+
+  this ( glTFObject obj, JSON_glTFMaterialPBRMetallicRoughnessInfo info ) {
+    writeln(info.baseColorFactor);
     colour_factor = info.baseColorFactor;
     metallic_factor = info.metallicFactor;
     roughness_factor = info.roughnessFactor;
+    if ( info.baseColorTexture.Exists )
+      base_colour_texture = glTFMaterialTexture(obj, info.baseColorTexture);
   }
 }
 struct glTFMaterialNil { }
@@ -273,11 +329,13 @@ struct glTFMaterial {
   mixin glTFTemplate!JSON_glTFMaterialInfo;
   Algebraic!(glTFMaterialPBRMetallicRoughness, glTFMaterialNil) material;
 
-  this ( uint idx, glTFObject data, ref JSON_glTFMaterialInfo info ) {
+  this ( uint idx, glTFObject obj, ref JSON_glTFMaterialInfo info ) {
     Template_Construct(idx, info);
     material = glTFMaterialNil();
-    if ( info.pbrMetallicRoughness.Exists )
-      material = glTFMaterialPBRMetallicRoughness(info.pbrMetallicRoughness);
+    if ( info.pbrMetallicRoughness.Exists ) {
+      material = glTFMaterialPBRMetallicRoughness(obj,
+                             info.pbrMetallicRoughness);
+    }
   }
 }
 
@@ -305,8 +363,10 @@ struct glTFPrimitive {
     Set_Accessor(data, glTFAttribute.Index, pri_info.indices);
     Set_Accessor(data, glTFAttribute.Position, atr.POSITION);
     Set_Accessor(data, glTFAttribute.Normal, atr.NORMAL);
+    Set_Accessor(data, glTFAttribute.TexCoord0, atr.TEXCOORD_0);
+    Set_Accessor(data, glTFAttribute.Colour0, atr.COLOR_0);
     mode = cast(glTFMode)pri_info.mode;
-    if ( pri_info.material >= 0 ) material = &data.materials[pri_info.material];
+    if ( pri_info.Has_Material ) material = &data.materials[pri_info.material];
   }
 }
 struct glTFMesh {
@@ -412,18 +472,11 @@ struct glTFTexture {
   this ( uint idx, glTFObject obj, ref JSON_glTFTextureInfo tex_info ) {
     Template_Construct(idx, tex_info);
     image = &obj.images[tex_info.source];
-    sampler = &obj.samplers[tex_info.sampler];
+    if ( tex_info.Has_Sampler )
+      sampler = &obj.samplers[tex_info.sampler];
   }
 }
 
-// ----- texture info ----------------------------------------------------------
-struct glTFMaterialTexture {
-  mixin glTFTemplate!JSON_glTFMaterialTextureInfo;
-
-  this ( glTFObject obj, ref JSON_glTFMaterialTextureInfo mat_info ) {
-    Template_Construct(0, mat_info);
-  }
-}
 
 // ----- misc functions --------------------------------------------------------
 private void Enforce_glTF ( string err ) {
