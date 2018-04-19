@@ -444,11 +444,11 @@ struct glTFSampler {
 // ----- scene -----------------------------------------------------------------
 struct glTFScene {
   mixin glTFTemplate!JSON_glTFSceneInfo;
-  glTFNode[] nodes;
+  glTFNode*[] nodes;
 
   this ( uint idx, glTFObject obj, ref JSON_glTFSceneInfo scn_info ) {
     Template_Construct(idx, scn_info);
-    nodes = scn_info.nodes.map!(i => obj.nodes[i]).array;
+    nodes = scn_info.nodes.map!(i => &obj.nodes[i]).array;
   }
 
   string RName ( ) { return name; }

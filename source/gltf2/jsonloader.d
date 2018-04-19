@@ -23,7 +23,7 @@ struct JSON_glTFFileInfo {
   JSON_glTFBufferViewInfo [] bufferViews;
   JSON_glTFImageInfo      []      images;
   JSON_glTFMaterialInfo   []   materials;
-  JSON_glTFMeshInfo       []       meshes;
+  JSON_glTFMeshInfo       []      meshes;
   JSON_glTFNodeInfo       []       nodes;
   JSON_glTFSamplerInfo    []    samplers;
   uint                             scene;
