@@ -1,67 +1,50 @@
 module gltf2.gltfroot;
-import gltf2.jsonloader, gltf2.gltfroot;
+import gltf2.gltfbase, gltf2.jsonloader, gltf2.gltfroot;
 import std.string;
+import std.traits;
 
-class glTFRootObject(string api,
-            API_glTFConstructor,
-            API_glTFAccessor,
-            API_glTFAnimation,
-            API_glTFBuffer,
-            API_glTFBufferView,
-            API_glTFImage,
-            API_glTFMaterial,
-            API_glTFMesh,
-            API_glTFNode,
-            API_glTFSampler,
-            API_glTFScene,
-            API_glTFSkin,
-            API_glTFTexture) {
-  struct RootSubObj(string type) {
-    mixin("glTF%s          gltf_data;".format(type));
-    mixin("API_glTF%s      %s_data;"  .format(type, api));
-  }
-  RootSubObj!"Accessor"   [] accessors;
-  RootSubObj!"Animation"  [] animations;
-  RootSubObj!"Buffer"     [] buffers;
-  RootSubObj!"BufferView" [] bufferViews;
-  RootSubObj!"Image"      [] images;
-  RootSubObj!"Material"   [] materials;
-  RootSubObj!"Mesh"       [] meshs;
-  RootSubObj!"Node"       [] nodes;
-  RootSubObj!"Sampler"    [] samplers;
-  RootSubObj!"Scene"      [] scenes;
-  RootSubObj!"Skin"       [] skins;
-  RootSubObj!"Texture"    [] textures;
+struct glTFSubrootObj(string api, glTFType, API_glTFType) {
+  glTFType gltf;
+  mixin(q{API_glTFType %s;}.format(api));
+  mixin(q{private alias api_data = %s;}.format(api));
+}
+
+private immutable string[] glTF_Subroot_obj_list = [
+  "Accessor", "Animation", "Buffer", "BufferView", "Image",
+  "Material", "Mesh", "Node", "Sampler", "Scene", "Skin", "Texture"
+];
+
+private template glTFSubrootAliasesConstructor(string api, APIType) {
+  static foreach ( mem; glTF_Subroot_obj_list )
+    mixin(q{ static alias Subroot%s = glTFSubrootObj!(api, glTF%s, APIType.%s);}
+          .format(mem, mem, mem));
+}
+
+class glTFRootObj(string api, APIType) {
+
+  // construct subroot gltf aliases
+  mixin glTFSubrootAliasesConstructor!(api, APIType);
+
+  SubrootAccessor   [] accessors;
+  SubrootAnimation  [] animations;
+  SubrootBuffer     [] buffers;
+  SubrootBufferView [] buffer_views;
+  SubrootImage      [] images;
+  SubrootMaterial   [] materials;
+  SubrootMesh       [] meshes;
+  SubrootNode       [] nodes;
+  SubrootSampler    [] samplers;
+  SubrootScene      [] scenes;
+  SubrootSkin       [] skins;
+  SubrootTexture    [] textures;
 
   string base_path;
 
-
-  private void Fill_Buffer(string mem, T, U)(ref T[] to, ref U[] from) {
-    import std.range, std.algorithm;
-    iota(0, from.length).each!((i) {
-    });
-  }
-
-  private void Apply_Fill(string u, T)(ref T asset) {
-    Fill_Buff!u(accessors,    json_asset.accessors);
-    Fill_Buff!u(animations,   json_asset.animations);
-    Fill_Buff!u(buffers,      json_asset.buffers);
-    Fill_Buff!u(buffer_views, json_asset.bufferViews);
-    Fill_Buff!u(images,       json_asset.images);
-    Fill_Buff!u(materials,    json_asset.materials);
-    Fill_Buff!u(meshes,       json_asset.meshes);
-    Fill_Buff!u(nodes,        json_asset.nodes);
-    Fill_Buff!u(samplers,     json_asset.samplers);
-    Fill_Buff!u(scenes,       json_asset.scenes);
-    Fill_Buff!u(skins,        json_asset.skins);
-    Fill_Buff!u(textures,     json_asset.textures);
-  }
-
-  void Load_JSON_File ( string filename ) {
-    import std.path : dirname;
+  this ( string filename ) {
+    import std.path : dirName;
     // -- load file
-    path = filename.dirName ~ "/";
-    JSON_glTFConstructor json_asset = glTF_Load_JSON_File(filename);
+    base_path = filename.dirName ~ "/";
+    JSON_glTFConstruct json_asset = JSON_glTFConstruct.Construct(filename);
 
     // -- set buffers
     accessors.length    = json_asset.accessors.length;
@@ -76,10 +59,54 @@ class glTFRootObject(string api,
     scenes.length       = json_asset.scenes.length;
     skins.length        = json_asset.skins.length;
     textures.length     = json_asset.textures.length;
+    import std.stdio;
+    writeln("TEXTURES: ", textures);
 
-    // -- fill buffer with json, glTF and then API
-    Apply_Fill!"json"(json_asset);
-    Apply_Fill!"glTF"(glTFObject(this));
-    Apply_Fill!api(API_glTFConstructor(this));
+    // -- fill buffer with glTF data
+    void Fill_glTFSubbuffers(T...)(ref T tuple) {
+      static foreach ( buff; tuple ) {
+        foreach ( it, ref mem; buff )
+          mem.gltf = typeof(mem.gltf)(cast(uint)it, this, json_asset);
+      }
+    }
+
+    Fill_glTFSubbuffers(accessors, animations, buffers, buffer_views, images,
+                        materials, meshes, nodes, samplers, scenes, skins,
+                        textures);
+    json_asset.destroy();
+
+    // // -- fill buffer with API data (order matters)
+    void Fill_APISubbuffers(T...)(ref T tuple) {
+      import std.stdio;
+      static foreach ( buff; tuple ) {
+        writeln("Fill subbuffer: ", typeof(buff[0].api_data).stringof);
+        foreach ( it, ref mem; buff )
+          mem.api_data = typeof(mem.api_data)(cast(uint)it, this);
+      }
+    }
+    Fill_APISubbuffers(textures, materials, buffers, buffer_views, accessors,
+                       animations, images, meshes, nodes, samplers, scenes,
+                       skins);
+    // --
   }
+}
+
+unittest {
+  import std.stdio;
+  struct API {
+    alias ROBJ = glTFRootObj!("vk", API);
+    struct Accessor   { this(uint it, ROBJ obj) {} }
+    struct Animation  { this(uint it, ROBJ obj) {} }
+    struct Buffer     { this(uint it, ROBJ obj) {} }
+    struct BufferView { this(uint it, ROBJ obj) {} }
+    struct Image      { this(uint it, ROBJ obj) {} }
+    struct Material   { this(uint it, ROBJ obj) {} }
+    struct Mesh       { this(uint it, ROBJ obj) {} }
+    struct Node       { this(uint it, ROBJ obj) {} }
+    struct Sampler    { this(uint it, ROBJ obj) {} }
+    struct Scene      { this(uint it, ROBJ obj) {} }
+    struct Skin       { this(uint it, ROBJ obj) {} }
+    struct Texture    { this(uint it, ROBJ obj) {} }
+  }
+  API.ROBJ base;
 }

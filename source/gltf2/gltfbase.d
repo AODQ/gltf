@@ -1,4 +1,5 @@
 module gltf2.gltfbase;
+import gltf2.gltfenum;
 import gltf2.jsonloader;
 import std.array;
 import std.algorithm;
@@ -11,129 +12,44 @@ import std.string;
 import std.traits;
 import std.conv;
 
-private alias JSONFile = JSON_glTFFileInfo;
-
-// ----- enum ------------------------------------------------------------------
-private T To_glTFEnum(T)(ulong mem) {
-  import std.traits;
-  Enforce_glTF(EnumMembers!T.only.canFind(mem),
-         "Value '%s' not a valid %s".format(mem, T.stringof));
-  return cast(T)mem;
-}
-enum glTFAssetType { Scene, Library };
-enum glTFAttribute { Index, Normal, Position, TexCoord0 = 10, Colour0 = 20 };
-enum glTFMode { Points = 0, Lines = 1, LineLoop = 2, LineStrip = 3,
-                Triangles = 4, TriangleStrip = 5, TriangleFan = 6 };
-auto glTFMode_Info ( glTFMode mode ) {
-  struct Info { string name; }
-  return Info(mode.to!string);
-}
-enum glTFType { Scalar, Vec2, Vec3, Vec4, Mat2, Mat3, Mat4 };
-auto glTFType_Info ( glTFType type ) {
-  immutable int[glTFType] To_Info = [
-    glTFType.Scalar: 1, glTFType.Vec2: 2, glTFType.Vec3: 3, glTFType.Vec4: 4,
-    glTFType.Mat2:   4, glTFType.Mat3: 9, glTFType.Mat4: 16
-  ];
-  struct Info { string label; uint count; }
-  return Info(type.to!string, To_Info[type]);
-}
-glTFType To_glTFType ( string u ) {
-  switch ( u ) with ( glTFType ) {
-    default: assert(false, "String '%s' not a valid type".format(u));
-    case "SCALAR": return Scalar; case "VEC2": return Vec2;
-    case "VEC3": return Vec3; case "VEC4": return Vec4;
-    case "MAT2": return Mat2; case "MAT3": return Mat3;
-    case "MAT4": return Mat4;
-  }
-}
-
-enum glTFFilterType {
-  Nearest = 9728, Linear = 9729,
-  NearestMipmapNearest = 9984,
-  LinearMipmapNearest = 9985,
-  NearestMipmapLinear = 9986,
-  LinearMipmapLinear = 9987
-}
-enum glTFWrapType {
-  ClampToEdge = 33071,
-  MirroredRepeat = 33648,
-  Repeat = 10497
-}
-enum glTFComponentType {
-  Byte=5120, Ubyte=5121, Short=5122, Ushort=5123, Int=5124, Uint=5125,
-  Float=5126
-};
-alias Scalar_To_glTFComponentType = To_glTFEnum!(glTFComponentType);
-auto glTFComponentType_Info ( glTFComponentType type ) {
-  struct Info { string name; uint label; uint size; }
-  final switch ( type ) with ( glTFComponentType ) {
-    case Byte:   return Info("Byte",   5120, 1);
-    case Ubyte:  return Info("Ubyte",  5121, 1);
-    case Short:  return Info("Short",  5122, 2);
-    case Ushort: return Info("Ushort", 5123, 2);
-    case Int:    return Info("Int",    5124, 4);
-    case Uint:   return Info("Uint",   5125, 4);
-    case Float:  return Info("Float",  5126, 4);
-  }
-}
-
-enum glTFBufferViewTarget {
-  NonGPU = 0,
-  Array = 34962,
-  ElementArray = 34963
-};
-alias Scalar_To_glTFBufferViewTarget = To_glTFEnum!(glTFBufferViewTarget);
 
 // ----- templates -------------------------------------------------------------
 private template glTFTemplate ( JSON_Base ) {
   static immutable bool Has_name = __traits(hasMember, JSON_Base, "name");
+  static immutable bool Has_buffer = JSON_glTFConstruct.HasBufferType!JSON_Base;
   static if ( Has_name ) string name;
   JsonValue extensions, extras;
-  JSON_Base json_info;
   uint buffer_index;
   private alias Type = typeof(this);
 
-  void Template_Construct ( uint _buffer_index, ref JSON_Base t ) {
-    json_info = t;
+  void Template_Construct(uint _buffer_index, ref JSON_Base obj) {
     buffer_index = _buffer_index;
-    static if ( Has_name ) name = t.name;
-    extensions = t.extensions;
-    extras = t.extras;
-  }
-}
-
-
-// ----- glTF (root object) ----------------------------------------------------
-void glTFConstructor(RObj, JObj)(ref RObj rootobj, ref JObj jobj) {
-  void Fill_Subbuffer(U, T)(ref T[] buff) {
-    foreach ( ref mem; buff ) mem.gltf_data = U(rootobj, mem);
+    static if ( Has_name ) name = obj.name;
+    extensions = obj.extensions;
+    extras = obj.extras;
   }
 
-  Fill_Subbuffer!glTFAccessor(rootobj.accessors);
-  Fill_Subbuffer!glTFAnimation(rootobj.animation);
-  Fill_Subbuffer!glTFBuffer(rootobj.buffer);
-  Fill_Subbuffer!glTFBufferView(rootobj.buffer_view);
-  Fill_Subbuffer!glTFImage(rootobj.image);
-  Fill_Subbuffer!glTFMaterial(rootobj.material);
-  Fill_Subbuffer!glTFMesh(rootobj.mesh);
-  Fill_Subbuffer!glTFNode(rootobj.node);
-  Fill_Subbuffer!glTFSampler(rootobj.sampler);
-  Fill_Subbuffer!glTFScene(rootobj.scene);
-  Fill_Subbuffer!glTFSkin(rootobj.skin);
-  Fill_Subbuffer!glTFTexture(rootobj.texture);
+  static if ( Has_buffer )
+  JSON_Base* Template_Construct(uint _buffer_index, JSON_glTFConstruct t){
+    buffer_index = _buffer_index;
+    JSON_Base* ptr = t.RPointer!JSON_Base(buffer_index);
+    Template_Construct(buffer_index, *ptr);
+    return ptr;
+  }
 }
 
 // ----- accessor --------------------------------------------------------------
 struct glTFAccessor {
   mixin glTFTemplate!JSON_glTFAccessorInfo;
+  uint buffer_view;
   uint count, offset;
   glTFType type;
   glTFComponentType component_type;
   JsonValue max, min;
 
-  this(RObj, RSubobj)(RObj obj, RSubobj sobj) {
-    Template_Construct(idx, sobj.json_data);
-    auto jdata = &sobj.json_data;
+  this(RObj)(uint idx, RObj obj, JSON_glTFConstruct sobj) {
+    auto jdata = Template_Construct(idx, sobj);
+    buffer_view = jdata.bufferView;
     count = jdata.count;
     offset = jdata.byteOffset;
     type = To_glTFType(jdata.type);
@@ -146,16 +62,16 @@ struct glTFAccessor {
 // ----- animation -------------------------------------------------------------
 struct glTFAnimation {
   mixin glTFTemplate!JSON_glTFAnimationInfo;
-  this ( uint idx, glTFObject data, ref JSON_glTFAnimationInfo ani_info ) {
-    Template_Construct(idx, ani_info);
+  this(RObj)(uint idx, RObj obj, JSON_glTFConstruct sobj) {
+    Template_Construct(idx, sobj);
   }
 }
 
 // ----- asset -----------------------------------------------------------------
 struct glTFAsset {
   mixin glTFTemplate!JSON_glTFAssetInfo;
-  this ( glTFObject data, ref JSON_glTFAssetInfo ass_info ) {
-    Template_Construct(0, ass_info);
+  this(RObj)(RObj obj, JSON_glTFConstruct sobj) {
+    Template_Construct(0, sobj.asset);
   }
 }
 
@@ -165,12 +81,12 @@ struct glTFBuffer {
   uint length;
   ubyte[] raw_data;
 
-  this ( uint idx, glTFObject obj, ref JSON_glTFBufferInfo buf_info ) {
-    Template_Construct(idx, buf_info);
+  this(RObj)(uint idx, RObj obj, JSON_glTFConstruct sobj) {
+    auto jdata = Template_Construct(idx, sobj);
     import std.file : read;
-    length = buf_info.byteLength;
+    length = jdata.byteLength;
     // TODO: variant for when uri is not a file
-    raw_data = cast(ubyte[])read(obj.repository ~ buf_info.uri);
+    raw_data = cast(ubyte[])read(obj.base_path ~ jdata.uri);
     Enforce_glTF(raw_data.length == length, "Buffer length mismatch");
   }
 }
@@ -180,13 +96,13 @@ struct glTFBufferView {
   glTFBufferViewTarget target;
   uint offset, length, stride;
 
-  this ( uint idx, glTFObject data, ref JSON_glTFBufferViewInfo buf_info ) {
-    Template_Construct(idx, buf_info);
-    buffer = &data.buffers[buf_info.buffer];
-    offset = buf_info.byteOffset;
-    length = buf_info.byteLength;
-    stride = buf_info.byteStride;
-    target = Scalar_To_glTFBufferViewTarget(buf_info.target);
+  this(RObj)(uint idx, RObj obj, JSON_glTFConstruct sobj) {
+    auto jdata = Template_Construct(idx, sobj);
+    buffer = &obj.buffers[jdata.buffer].gltf;
+    offset = jdata.byteOffset;
+    length = jdata.byteLength;
+    stride = jdata.byteStride;
+    target = Scalar_To_glTFBufferViewTarget(jdata.target);
   }
 }
 
@@ -194,8 +110,8 @@ struct glTFBufferView {
 struct glTFCamera {
   mixin glTFTemplate!JSON_glTFCameraInfo;
 
-  this ( uint idx, glTFObject data, ref JSON_glTFCameraInfo cam_info ) {
-    Template_Construct(idx, cam_info);
+  this(RObj)(uint idx, ref JSON_glTFNodeInfo node) {
+    // Template_Construct(idx, sobj);
   }
 }
 
@@ -215,10 +131,10 @@ struct glTFImage {
     return w + 1;
   }
 
-  this ( uint idx, glTFObject data, ref JSON_glTFImageInfo info ) {
-    Template_Construct(idx, info);
+  this(RObj)(uint idx, RObj obj, JSON_glTFConstruct sobj) {
+    auto jdata = Template_Construct(idx, sobj);
     import imageformats;
-    auto img = read_image(data.repository ~ info.uri);
+    auto img = read_image(obj.base_path ~ jdata.uri);
     raw_data = img.pixels;
     width = img.w; height = img.h;
 
@@ -254,14 +170,15 @@ struct glTFImage {
 // ----- material --------------------------------------------------------------
 struct glTFMaterialTexture {
   mixin glTFTemplate!JSON_glTFMaterialTextureInfo;
-  glTFTexture* texture;
+  uint texture = -1;
 
-  this ( glTFObject obj, ref JSON_glTFMaterialTextureInfo mat_info ) {
-    Template_Construct(0, mat_info);
-    texture = &obj.textures[mat_info.index];
+  this(RObj)(RObj obj, JSON_glTFMaterialTextureInfo jdata) {
+    Template_Construct(0, jdata);
+    writeln("IDX: ", jdata.index);
+    texture = jdata.index;
   }
 
-  bool Exists ( ) { return texture !is null; }
+  bool Exists ( ) { return texture !is -1; }
 }
 struct glTFMaterialPBRMetallicRoughness {
   float[] colour_factor;
@@ -272,13 +189,12 @@ struct glTFMaterialPBRMetallicRoughness {
     return base_colour_texture.Exists;
   }
 
-  this ( glTFObject obj, JSON_glTFMaterialPBRMetallicRoughnessInfo info ) {
-    writeln(info.baseColorFactor);
-    colour_factor = info.baseColorFactor;
-    metallic_factor = info.metallicFactor;
-    roughness_factor = info.roughnessFactor;
-    if ( info.baseColorTexture.Exists )
-      base_colour_texture = glTFMaterialTexture(obj, info.baseColorTexture);
+  this(RObj)(RObj obj, JSON_glTFMaterialPBRMetallicRoughnessInfo jdata) {
+    colour_factor = jdata.baseColorFactor;
+    metallic_factor = jdata.metallicFactor;
+    roughness_factor = jdata.roughnessFactor;
+    if ( jdata.baseColorTexture.Exists )
+      base_colour_texture = glTFMaterialTexture(obj, jdata.baseColorTexture);
   }
 }
 struct glTFMaterialNil { }
@@ -286,12 +202,12 @@ struct glTFMaterial {
   mixin glTFTemplate!JSON_glTFMaterialInfo;
   Algebraic!(glTFMaterialPBRMetallicRoughness, glTFMaterialNil) material;
 
-  this ( uint idx, glTFObject obj, ref JSON_glTFMaterialInfo info ) {
-    Template_Construct(idx, info);
+  this(RObj)(uint idx, RObj obj, JSON_glTFConstruct sobj) {
+    auto jdata = Template_Construct(idx, sobj);
     material = glTFMaterialNil();
-    if ( info.pbrMetallicRoughness.Exists ) {
+    if ( jdata.pbrMetallicRoughness.Exists ) {
       material = glTFMaterialPBRMetallicRoughness(obj,
-                             info.pbrMetallicRoughness);
+                             jdata.pbrMetallicRoughness);
     }
   }
 }
@@ -300,13 +216,14 @@ struct glTFMaterial {
 struct glTFPrimitive {
   mixin glTFTemplate!JSON_glTFMeshPrimitiveInfo;
   private glTFAccessor*[glTFAttribute] accessors;
-  glTFMaterial* material;
+  uint material = -1;
   glTFMode mode;
 
-  private void Set_Accessor(glTFObject data, glTFAttribute atr, int idx) {
-    accessors[atr] = idx != -1 ? &data.accessors[idx] : null;
+  private void Set_Accessor(RObj)(RObj data, glTFAttribute atr, int idx) {
+    accessors[atr] = idx != -1 ? &data.accessors[idx].gltf : null;
   }
 
+  bool Has_Material ( ) { return material != -1; }
   bool Has_Index ( ) {
     return accessors[glTFAttribute.Index] !is null;
   }
@@ -314,16 +231,16 @@ struct glTFPrimitive {
     return accessors[atr];
   }
 
-  this ( uint idx, glTFObject data, JSON_glTFMeshPrimitiveInfo pri_info ) {
-    Template_Construct(idx, pri_info);
-    auto atr = &pri_info.attributes;
-    Set_Accessor(data, glTFAttribute.Index, pri_info.indices);
-    Set_Accessor(data, glTFAttribute.Position, atr.POSITION);
-    Set_Accessor(data, glTFAttribute.Normal, atr.NORMAL);
-    Set_Accessor(data, glTFAttribute.TexCoord0, atr.TEXCOORD_0);
-    Set_Accessor(data, glTFAttribute.Colour0, atr.COLOR_0);
-    mode = cast(glTFMode)pri_info.mode;
-    if ( pri_info.Has_Material ) material = &data.materials[pri_info.material];
+  this(RObj)(uint idx, RObj obj, ref JSON_glTFMeshPrimitiveInfo jdata) {
+    Template_Construct(idx, jdata);
+    auto atr = &jdata.attributes;
+    Set_Accessor(obj, glTFAttribute.Index,     jdata.indices);
+    Set_Accessor(obj, glTFAttribute.Position,  atr.POSITION);
+    Set_Accessor(obj, glTFAttribute.Normal,    atr.NORMAL);
+    Set_Accessor(obj, glTFAttribute.TexCoord0, atr.TEXCOORD_0);
+    Set_Accessor(obj, glTFAttribute.Colour0,   atr.COLOR_0);
+    mode = cast(glTFMode)jdata.mode;
+    material = jdata.material;
   }
 }
 struct glTFMesh {
@@ -331,12 +248,12 @@ struct glTFMesh {
   glTFPrimitive[] primitives;
   float[] weights;
 
-  this ( uint idx, glTFObject obj, ref JSON_glTFMeshInfo msh_info ) {
-    Template_Construct(idx, msh_info);
-    name = msh_info.name;
-    weights = msh_info.weights;
+  this(RObj)(uint idx, RObj obj, JSON_glTFConstruct sobj) {
+    auto jdata = Template_Construct(idx, sobj);
+    name = jdata.name;
+    weights = jdata.weights;
     // fill primitives
-    foreach ( iter, p; msh_info.primitives )
+    foreach ( iter, ref p; jdata.primitives )
       primitives ~= glTFPrimitive(cast(uint)iter, obj, p);
   }
 }
@@ -344,41 +261,40 @@ struct glTFMesh {
 // ----- node ------------------------------------------------------------------
 struct glTFNode {
   mixin glTFTemplate!JSON_glTFNodeInfo;
-  glTFNode*[] children;
-  glTFMesh* mesh;
+  uint[] children;
+  uint mesh;
   float[] matrix;
 
   bool Has_Transformation_Matrix() { return !matrix.empty(); }
-  bool Has_Mesh() { return mesh !is null; }
-  glTFMesh* RMesh() { return mesh; }
+  bool Has_Mesh() { return mesh !is -1; }
+  uint RMesh() { return mesh; }
 
   void Enforce(bool cond, string err) {
     if ( !cond ) throw new Exception("Node '%s' %s".format(name, err));
   }
 
-  this ( uint idx, glTFObject obj, ref JSON_glTFNodeInfo node_info ) {
-    Template_Construct(idx, node_info);
-    name = node_info.name;
-    children = node_info.children.map!(i => &obj.nodes[i]).array;
-    if ( node_info.mesh != -1 ) mesh = &obj.meshes[node_info.mesh];
+  this(RObj)(uint idx, RObj obj, JSON_glTFConstruct sobj) {
+    auto jdata = Template_Construct(idx, sobj);
+    children = jdata.children.map!(i => cast(uint)i).array;
+    mesh = jdata.mesh;
     // -- set matrix --
-    if ( node_info.matrix.length == 16 ) {
-      matrix = node_info.matrix;
-    } else if ( node_info.matrix.length == 9 ) {
+    if ( jdata.matrix.length == 16 ) {
+      matrix = jdata.matrix;
+    } else if ( jdata.matrix.length == 9 ) {
       matrix = [
-        node_info.matrix[0], node_info.matrix[1], node_info.matrix[2], 0.0f,
-        node_info.matrix[3], node_info.matrix[4], node_info.matrix[5], 0.0f,
-        node_info.matrix[6], node_info.matrix[7], node_info.matrix[8], 0.0f,
+        jdata.matrix[0], jdata.matrix[1], jdata.matrix[2], 0.0f,
+        jdata.matrix[3], jdata.matrix[4], jdata.matrix[5], 0.0f,
+        jdata.matrix[6], jdata.matrix[7], jdata.matrix[8], 0.0f,
         0.0f,                0.0f,                0.0f,                1.0f,
       ];
-    } else if ( node_info.matrix.length == 0 ) {
+    } else if ( jdata.matrix.length == 0 ) {
       // no translation/rotation/scale
-      Enforce(node_info.translation.length == 0 && node_info.scale.length == 0
-           && node_info.rotation.length == 0, "TRS vectors not yet supported");
+      Enforce(jdata.translation.length == 0 && jdata.scale.length == 0
+           && jdata.rotation.length == 0, "TRS vectors not yet supported");
       matrix = [1,0,0,0,0,1,0,0,0,0,1,0,0,0,0,1];
     } else {
       throw new Exception("Unsupported node-transformation matrix length of %s"
-                           .format(node_info.matrix.length));
+                           .format(jdata.matrix.length));
     }
   }
 }
@@ -389,23 +305,23 @@ struct glTFSampler {
   glTFFilterType min_filter, mag_filter;
   glTFWrapType wrap_s, wrap_t;
 
-  this ( uint idx, glTFObject obj, ref JSON_glTFSamplerInfo info ) {
-    Template_Construct(idx, info);
-    min_filter = cast(glTFFilterType)info.minFilter;
-    mag_filter = cast(glTFFilterType)info.magFilter;
-    wrap_s = cast(glTFWrapType)info.wrapS;
-    wrap_t = cast(glTFWrapType)info.wrapT;
+  this(RObj)(uint idx, RObj obj, JSON_glTFConstruct sobj) {
+    auto jdata = Template_Construct(idx, sobj);
+    min_filter = cast(glTFFilterType)jdata.minFilter;
+    mag_filter = cast(glTFFilterType)jdata.magFilter;
+    wrap_s = cast(glTFWrapType)jdata.wrapS;
+    wrap_t = cast(glTFWrapType)jdata.wrapT;
   }
 }
 
 // ----- scene -----------------------------------------------------------------
 struct glTFScene {
   mixin glTFTemplate!JSON_glTFSceneInfo;
-  glTFNode*[] nodes;
+  uint[] nodes;
 
-  this ( uint idx, glTFObject obj, ref JSON_glTFSceneInfo scn_info ) {
-    Template_Construct(idx, scn_info);
-    nodes = scn_info.nodes.map!(i => &obj.nodes[i]).array;
+  this(RObj)(uint idx, RObj obj, JSON_glTFConstruct sobj) {
+    auto jdata = Template_Construct(idx, sobj);
+    nodes = jdata.nodes.map!(i => cast(uint)i).array;
   }
 
   string RName ( ) { return name; }
@@ -415,8 +331,8 @@ struct glTFScene {
 struct glTFSkin {
   mixin glTFTemplate!JSON_glTFSkinInfo;
 
-  this ( uint idx, glTFObject obj, ref JSON_glTFSkinInfo skn_info ) {
-    Template_Construct(idx, skn_info);
+  this(RObj)(uint idx, RObj obj, JSON_glTFConstruct sobj) {
+    auto jdata = Template_Construct(idx, sobj);
   }
 }
 
@@ -426,25 +342,16 @@ struct glTFTexture {
   glTFImage* image;
   glTFSampler* sampler;
 
-  this ( uint idx, glTFObject obj, ref JSON_glTFTextureInfo tex_info ) {
-    Template_Construct(idx, tex_info);
-    image = &obj.images[tex_info.source];
-    if ( tex_info.Has_Sampler )
-      sampler = &obj.samplers[tex_info.sampler];
+  this(RObj)(uint idx, RObj obj, JSON_glTFConstruct sobj) {
+    auto jdata = Template_Construct(idx, sobj);
+    image = &obj.images[jdata.source].gltf;
+    if ( jdata.Has_Sampler )
+      sampler = &obj.samplers[jdata.sampler].gltf;
   }
 }
 
 
 // ----- misc functions --------------------------------------------------------
-private void Enforce_glTF ( string err ) {
-  throw new Exception(err);
-}
-private void Enforce_glTF ( bool cond, string err ) {
-  if ( !cond ) throw new Exception(err);
-}
-private void Enforce_glTF(T)(T* ptr, string err) {
-  if ( ptr is null ) throw new Exception(err);
-}
 
 void Emit_Warning ( string warning ) {
   writeln("Warning: ", warning);
@@ -457,36 +364,24 @@ bool Supported_Extension ( string extension ) {
   }
 }
 
-void Enforce_File_Asset_Data(JSONFile json_asset) {
-  // -- check version --
-  string ver = json_asset.asset._version;
-  if ( json_asset.asset.minVersion != "" ) ver = json_asset.asset.minVersion;
-  switch ( ver ) {
-    default: throw new Exception("Unsupported glTF Version " ~ ver);
-    case "2.0": break;
-    case "1.0":
-      throw new Exception("glTF2 not backwards-compatible with version 1.0");
-  }
-  // -- check extensions required --
-  foreach ( ext; json_asset.extensionsRequired ) {
-    if ( !Supported_Extension(ext) )
-      throw new Exception("Required extension '%s' not supported".format(ext));
-  }
-  // -- check extensions used --
-  foreach ( ext; json_asset.extensionsUsed ) {
-    if ( !Supported_Extension(ext) )
-      Emit_Warning("extension '%s' used but not supported".format(ext));
-  }
-}
-
-auto glTF_Load_JSON_File(string filename) {
-  enforce(exists(filename), "Could not load file " ~ filename);
-  return Load_JSON_glTFFileInfo(filename);
-}
-glTFObject glTF_Load_File(string filename) {
-  import std.path;
-  string path = filename.dirName ~ "/";
-  auto json_asset = glTF_Load_JSON_File(filename);
-  glTFObject obj = new glTFObject(path, json_asset);
-  return obj;
-}
+// void Enforce_File_Asset_Data(JSON_glTFAssetInfo json_asset) {
+//   // -- check version --
+//   string ver = json_asset._version;
+//   if ( json_asset.minVersion != "" ) ver = json_asset.minVersion;
+//   switch ( ver ) {
+//     default: throw new Exception("Unsupported glTF Version " ~ ver);
+//     case "2.0": break;
+//     case "1.0":
+//       throw new Exception("glTF2 not backwards-compatible with version 1.0");
+//   }
+//   // -- check extensions required --
+//   foreach ( ext; json_asset.extensionsRequired ) {
+//     if ( !Supported_Extension(ext) )
+//       throw new Exception("Required extension '%s' not supported".format(ext));
+//   }
+//   // -- check extensions used --
+//   foreach ( ext; json_asset.extensionsUsed ) {
+//     if ( !Supported_Extension(ext) )
+//       Emit_Warning("extension '%s' used but not supported".format(ext));
+//   }
+// }

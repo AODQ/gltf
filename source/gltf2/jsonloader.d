@@ -2,6 +2,7 @@ module gltf2.jsonloader;
 import gltf2.jsonx;
 public import gltf2.jsonx : JsonValue;
 import std.array, std.string, std.file : exists;
+import std.traits;
 import std.variant;
 
 private template JSON_glTFTemplate ( bool Has_name = true ) {
@@ -13,12 +14,13 @@ private template JSON_glTFTemplate ( bool Has_name = true ) {
 }
 
 // ----- glTF (root object) ----------------------------------------------------
-struct JSON_glTFConstructor {
+class JSON_glTFConstruct {
   mixin JSON_glTFTemplate!false;
   string[] extensionsUsed, extensionsRequired;
+  uint scene;
+  JSON_glTFAssetInfo asset;
   JSON_glTFAccessorInfo   []   accessors;
   JSON_glTFAnimationInfo  []  animations;
-  JSON_glTFAssetInfo               asset;
   JSON_glTFBufferInfo     []     buffers;
   JSON_glTFBufferViewInfo [] bufferViews;
   JSON_glTFImageInfo      []      images;
@@ -26,10 +28,29 @@ struct JSON_glTFConstructor {
   JSON_glTFMeshInfo       []      meshes;
   JSON_glTFNodeInfo       []       nodes;
   JSON_glTFSamplerInfo    []    samplers;
-  uint                             scene;
   JSON_glTFSceneInfo      []      scenes;
   JSON_glTFSkinInfo       []       skins;
   JSON_glTFTextureInfo    []    textures;
+
+  auto RPointer(T:JSON_glTFAccessorInfo  )(uint i){return &accessors[i];}
+  auto RPointer(T:JSON_glTFAnimationInfo )(uint i){return &animations[i];}
+  auto RPointer(T:JSON_glTFBufferInfo    )(uint i){return &buffers[i];}
+  auto RPointer(T:JSON_glTFBufferViewInfo)(uint i){return &bufferViews[i];}
+  auto RPointer(T:JSON_glTFImageInfo     )(uint i){return &images[i];}
+  auto RPointer(T:JSON_glTFMaterialInfo  )(uint i){return &materials[i];}
+  auto RPointer(T:JSON_glTFMeshInfo      )(uint i){return &meshes[i];}
+  auto RPointer(T:JSON_glTFNodeInfo      )(uint i){return &nodes[i];}
+  auto RPointer(T:JSON_glTFSamplerInfo   )(uint i){return &samplers[i];}
+  auto RPointer(T:JSON_glTFSceneInfo     )(uint i){return &scenes[i];}
+  auto RPointer(T:JSON_glTFSkinInfo      )(uint i){return &skins[i];}
+  auto RPointer(T:JSON_glTFTextureInfo   )(uint i){return &textures[i];}
+
+  static enum HasBufferType(T) = __traits(compiles, RPointer!T(0));
+
+  static JSON_glTFConstruct Construct ( string filename ) {
+    import std.string, std.conv, std.file;
+    return jsonDecode!JSON_glTFConstruct(filename.read.to!string.strip);
+  }
 };
 
 // ----- accessor --------------------------------------------------------------
@@ -234,11 +255,4 @@ struct JSON_glTFTextureInfo {
   mixin JSON_glTFTemplate;
   uint sampler = -1, source;
   bool Has_Sampler ( ) { return sampler != -1; }
-}
-
-// ----- texture info ----------------------------------------------------------
-
-JSON_glTFConstructor Load_JSON_glTFFileInfo(string gltf_file) {
-  import std.file, std.conv, std.string;
-  return jsonDecode!JSON_glTFConstructor(gltf_file.read.to!string.strip);
 }
