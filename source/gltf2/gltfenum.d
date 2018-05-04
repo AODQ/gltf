@@ -74,6 +74,27 @@ auto glTFComponentType_Info ( glTFComponentType type ) {
   }
 }
 
+enum glTFInterpolation {
+  Linear, Step, CubicSpline
+}
+glTFInterpolation String_To_glTFInterpolation ( string t ) {
+  switch ( t ) {
+    default: assert(false, t ~ " not valid glTFInterpolation");
+    case "LINEAR":      return glTFInterpolation.Linear;
+    case "STEP":        return glTFInterpolation.Step;
+    case "CUBICSPLINE": return glTFInterpolation.CubicSpline;
+  }
+}
+enum glTFCameraType { Perspective, Orthographic };
+auto String_To_glTFCameraType ( string str ) {
+  switch ( str ) {
+    default: assert(false, "Invalid glTFCameraType " ~ str );
+    case "": goto case "perspective"; // explicit fallthrough
+    case "perspective":  return glTFCameraType.Perspective;
+    case "orthographic": return glTFCameraType.Orthographic;
+  }
+}
+
 enum glTFBufferViewTarget {
   NonGPU = 0,
   Array = 34962,

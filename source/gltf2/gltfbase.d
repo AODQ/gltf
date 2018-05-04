@@ -17,7 +17,10 @@ import std.conv;
 private template glTFTemplate ( JSON_Base ) {
   static immutable bool Has_name = __traits(hasMember, JSON_Base, "name");
   static immutable bool Has_buffer = JSON_glTFConstruct.HasBufferType!JSON_Base;
-  static if ( Has_name ) string name;
+  static if ( Has_name ) {
+    private string name;
+    string RName ( ) { return name; }
+  }
   JsonValue extensions, extras;
   uint buffer_index;
   private alias Type = typeof(this);
@@ -60,10 +63,57 @@ struct glTFAccessor {
 }
 
 // ----- animation -------------------------------------------------------------
+struct glTFAnimationSampler {
+  mixin glTFTemplate!JSON_glTFAnimationSamplerInfo;
+  uint input, output;
+  glTFInterpolation interpolation;
+  this(RObj)(uint idx, RObj obj, JSON_glTFAnimationSamplerInfo jdata) {
+    Template_Construct(idx, jdata);
+    input = jdata.input;
+    output = jdata.output;
+    interpolation = String_To_glTFInterpolation(jdata.interpolation);
+  }
+}
+struct glTFAnimationChannelTarget {
+  mixin glTFTemplate!JSON_glTFAnimationChannelTargetInfo;
+  uint node;
+  string path;
+  this(RObj)(RObj obj, JSON_glTFAnimationChannelTargetInfo jdata) {
+    Template_Construct(0, jdata);
+    node = jdata.node;
+    path = jdata.path;
+  }
+}
+struct glTFAnimationChannel {
+  mixin glTFTemplate!JSON_glTFAnimationChannelInfo;
+  uint sampler;
+  glTFAnimationChannelTarget target;
+  this(RObj)(uint idx, RObj obj, JSON_glTFAnimationChannelInfo jdata) {
+    Template_Construct(idx, jdata);
+    sampler = jdata.sampler;
+    target = glTFAnimationChannelTarget(obj, jdata.target);
+  }
+}
 struct glTFAnimation {
   mixin glTFTemplate!JSON_glTFAnimationInfo;
+  glTFAnimationSampler[] samplers;
+  glTFAnimationChannel[] channels;
   this(RObj)(uint idx, RObj obj, JSON_glTFConstruct sobj) {
-    Template_Construct(idx, sobj);
+    auto jdata = Template_Construct(idx, sobj);
+    foreach ( t_idx, ref i; jdata.samplers )
+      samplers ~= glTFAnimationSampler(cast(uint)t_idx, obj, i);
+    foreach ( t_idx, ref i; jdata.channels )
+      channels ~= glTFAnimationChannel(cast(uint)t_idx, obj, i);
+  }
+
+  void Update(RObj)(RObj obj, float delta) {
+    foreach ( ref channel; channels ) {
+      auto sampler = &samplers[channel.sampler];
+      auto accessor = &obj.accessors[sampler.input].gltf;
+      auto buffer_view = &obj.buffer_views[accessor.buffer_view].gltf;
+      auto data = obj.buffers[buffer_view.buffer].gltf.raw_data;
+      writeln(cast(float[])data);
+    }
   }
 }
 
@@ -92,13 +142,13 @@ struct glTFBuffer {
 }
 struct glTFBufferView {
   mixin glTFTemplate!JSON_glTFBufferViewInfo;
-  glTFBuffer* buffer;
+  uint buffer;
   glTFBufferViewTarget target;
   uint offset, length, stride;
 
   this(RObj)(uint idx, RObj obj, JSON_glTFConstruct sobj) {
     auto jdata = Template_Construct(idx, sobj);
-    buffer = &obj.buffers[jdata.buffer].gltf;
+    buffer = jdata.buffer;
     offset = jdata.byteOffset;
     length = jdata.byteLength;
     stride = jdata.byteStride;
@@ -107,11 +157,47 @@ struct glTFBufferView {
 }
 
 // ----- camera ----------------------------------------------------------------
+struct glTFCameraPerspective {
+  mixin glTFTemplate!JSON_glTFCameraProjectionPerspectiveInfo;
+  float aspect_ratio = 0.0f;
+  float yfov, zfar, znear;
+
+  this(RObj)(RObj obj, JSON_glTFCameraProjectionPerspectiveInfo jdata) {
+    Template_Construct(0, jdata);
+    aspect_ratio = jdata.aspectRatio;
+    yfov = jdata.yfov;
+    zfar = jdata.zfar;
+    znear = jdata.znear;
+  }
+}
+
+struct glTFCameraOrthographic {
+  mixin glTFTemplate!JSON_glTFCameraProjectionOrthographicInfo;
+  float xmag, ymag, zfar, znear;
+
+  this(RObj)(RObj obj, JSON_glTFCameraProjectionOrthographicInfo jdata) {
+    Template_Construct(0, jdata);
+    xmag = jdata.xmag; ymag  = jdata.ymag;
+    zfar = jdata.zfar; znear = jdata.znear;
+  }
+}
+
 struct glTFCamera {
   mixin glTFTemplate!JSON_glTFCameraInfo;
+  glTFCameraType type;
+  Algebraic!(glTFCameraPerspective, glTFCameraOrthographic) camera;
 
-  this(RObj)(uint idx, ref JSON_glTFNodeInfo node) {
-    // Template_Construct(idx, sobj);
+  this(RObj)(uint idx, RObj obj, JSON_glTFConstruct sobj) {
+    auto jdata = Template_Construct(idx, sobj);
+    type = String_To_glTFCameraType(jdata.type);
+    final switch ( type ) with ( glTFCameraType ) {
+      case Perspective:
+        camera = glTFCameraPerspective (obj,  jdata.perspective);
+      break;
+      case Orthographic:
+        camera = glTFCameraOrthographic(obj,  jdata.orthographic);
+      break;
+    }
   }
 }
 
@@ -258,15 +344,25 @@ struct glTFMesh {
   }
 }
 
+struct glTFMatrix {
+  float[] data;
+}
+struct glTFTRSMatrix {
+  float[] translation;
+  float[] rotation;
+  float[] scale;
+}
 // ----- node ------------------------------------------------------------------
 struct glTFNode {
   mixin glTFTemplate!JSON_glTFNodeInfo;
   uint[] children;
-  uint mesh;
-  float[] matrix;
+  uint mesh = -1;
+  uint camera = -1;
 
-  bool Has_Transformation_Matrix() { return !matrix.empty(); }
-  bool Has_Mesh() { return mesh !is -1; }
+  Algebraic!(glTFMatrix, glTFTRSMatrix) transform;
+
+  bool Has_Mesh()   { return mesh !is -1; }
+  bool Has_Camera() { return camera !is -1; }
   uint RMesh() { return mesh; }
 
   void Enforce(bool cond, string err) {
@@ -277,21 +373,24 @@ struct glTFNode {
     auto jdata = Template_Construct(idx, sobj);
     children = jdata.children.map!(i => cast(uint)i).array;
     mesh = jdata.mesh;
+    camera = jdata.camera;
     // -- set matrix --
     if ( jdata.matrix.length == 16 ) {
-      matrix = jdata.matrix;
+      transform = glTFMatrix(jdata.matrix);
     } else if ( jdata.matrix.length == 9 ) {
-      matrix = [
+      transform = glTFMatrix([
         jdata.matrix[0], jdata.matrix[1], jdata.matrix[2], 0.0f,
         jdata.matrix[3], jdata.matrix[4], jdata.matrix[5], 0.0f,
         jdata.matrix[6], jdata.matrix[7], jdata.matrix[8], 0.0f,
         0.0f,                0.0f,                0.0f,                1.0f,
-      ];
+      ]);
     } else if ( jdata.matrix.length == 0 ) {
-      // no translation/rotation/scale
-      Enforce(jdata.translation.length == 0 && jdata.scale.length == 0
-           && jdata.rotation.length == 0, "TRS vectors not yet supported");
-      matrix = [1,0,0,0,0,1,0,0,0,0,1,0,0,0,0,1];
+      // fill in missing TRS
+      if ( jdata.translation.empty ) jdata.translation = [0f, 0f, 0f];
+      if ( jdata.rotation.empty    ) jdata.rotation = [0f, 0f, 0f, 1f];
+      if ( jdata.scale.empty       ) jdata.scale = [0f, 0f, 0f, 1f];
+      // -- create matrices from vectors
+      transform = glTFTRSMatrix(jdata.translation, jdata.rotation, jdata.scale);
     } else {
       throw new Exception("Unsupported node-transformation matrix length of %s"
                            .format(jdata.matrix.length));
@@ -323,8 +422,6 @@ struct glTFScene {
     auto jdata = Template_Construct(idx, sobj);
     nodes = jdata.nodes.map!(i => cast(uint)i).array;
   }
-
-  string RName ( ) { return name; }
 }
 
 // ----- skin ------------------------------------------------------------------

@@ -23,6 +23,7 @@ class JSON_glTFConstruct {
   JSON_glTFAnimationInfo  []  animations;
   JSON_glTFBufferInfo     []     buffers;
   JSON_glTFBufferViewInfo [] bufferViews;
+  JSON_glTFCameraInfo     []     cameras;
   JSON_glTFImageInfo      []      images;
   JSON_glTFMaterialInfo   []   materials;
   JSON_glTFMeshInfo       []      meshes;
@@ -36,6 +37,7 @@ class JSON_glTFConstruct {
   auto RPointer(T:JSON_glTFAnimationInfo )(uint i){return &animations[i];}
   auto RPointer(T:JSON_glTFBufferInfo    )(uint i){return &buffers[i];}
   auto RPointer(T:JSON_glTFBufferViewInfo)(uint i){return &bufferViews[i];}
+  auto RPointer(T:JSON_glTFCameraInfo    )(uint i){return &cameras[i];}
   auto RPointer(T:JSON_glTFImageInfo     )(uint i){return &images[i];}
   auto RPointer(T:JSON_glTFMaterialInfo  )(uint i){return &materials[i];}
   auto RPointer(T:JSON_glTFMeshInfo      )(uint i){return &meshes[i];}
@@ -99,7 +101,7 @@ struct JSON_glTFAnimationSamplerInfo {
 struct JSON_glTFAnimationInfo {
   mixin JSON_glTFTemplate;
   JSON_glTFAnimationChannelInfo[] channels;
-  JSON_glTFAnimationSamplerInfo[] sammplers;
+  JSON_glTFAnimationSamplerInfo[] samplers;
 }
 
 // ----- asset -----------------------------------------------------------------
