@@ -145,6 +145,7 @@ class glTFRootObj(string api, APIType) {
 
   void Update_Animation ( float delta ) {
     foreach ( ani; animations ) ani.gltf.Update(this, delta);
+    foreach ( node; nodes ) node.gltf.Update(this);
   }
 }
 

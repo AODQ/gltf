@@ -124,7 +124,8 @@ struct JSON_glTFBufferViewInfo {
   uint buffer = -1,
        byteLength = -1,
        byteOffset = 0,
-       byteStride, target;
+       byteStride,
+       target = 34962;
 }
 
 // ----- camera ----------------------------------------------------------------
@@ -228,7 +229,7 @@ struct JSON_glTFNodeInfo {
   float[] rotation    = [0f, 0f, 0f, 1f],
           scale       = [1f, 1f, 1f],
           translation = [0f, 0f, 0f];
-  float[] matrix = [1f,0f,0f,0f,0f,1f,0f,0f,0f,0f,1f,0f,0f,0f,0f,1f];
+  float[] matrix = []; // non-standard hack for now
   uint[] weights;
 }
 

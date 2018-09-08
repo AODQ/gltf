@@ -41,14 +41,72 @@ private template glTFTemplate ( JSON_Base ) {
   }
 }
 
+// ----- sparse accessor -------------------------------------------------------
+struct glTFSparseAccessorIndex {
+  mixin glTFTemplate!JSON_glTFSparseAccessorIndexInfo;
+
+  uint buffer_view;
+  uint byte_offset;
+  uint component_type;
+
+  this ( ref JSON_glTFSparseAccessorIndexInfo jdata ) {
+    buffer_view = jdata.bufferView;
+    byte_offset = jdata.byteOffset;
+    component_type = jdata.componentType;
+  }
+}
+struct glTFSparseAccessorValue {
+  mixin glTFTemplate!JSON_glTFSparseAccessorValueInfo;
+
+  uint buffer_view;
+  uint byte_offset;
+
+  this ( ref JSON_glTFSparseAccessorValueInfo jdata ) {
+    buffer_view = jdata.bufferView;
+    byte_offset = jdata.byteOffset;
+  }
+}
+struct glTFSparseAccessor {
+  mixin glTFTemplate!JSON_glTFSparseAccessorInfo;
+
+  uint count;
+  glTFSparseAccessorIndex indices;
+  glTFSparseAccessorValue values;
+
+  this ( ref JSON_glTFSparseAccessorInfo jdata) {
+    count = jdata.count;
+    if ( count == -1 ) return;
+    indices = glTFSparseAccessorIndex(jdata.indices);
+    values  = glTFSparseAccessorValue(jdata.values);
+  }
+
+  bool Exists ( ) {
+    return count != -1;
+  }
+}
+
 // ----- accessor --------------------------------------------------------------
 struct glTFAccessor {
   mixin glTFTemplate!JSON_glTFAccessorInfo;
   uint buffer_view;
   uint count, offset;
+  alias byte_offset = offset;
+  alias byteOffset = offset;
   glTFType type;
   glTFComponentType component_type;
+  alias componentType = component_type;
   JsonValue max, min;
+
+  glTFSparseAccessor sparse_accessor;
+
+  ubyte[] Load_Raw_Data(Robj)(Robj obj) {
+    auto buffer_view_ptr = &obj.buffer_views[buffer_view].gltf;
+    return obj.buffers[buffer_view_ptr.buffer].gltf.Load_From_Accessor(obj, this);
+  }
+
+  glTFSparseAccessor* RSparseAccessor ( ) {
+    return &sparse_accessor;
+  }
 
   this(RObj)(uint idx, RObj obj, JSON_glTFConstruct sobj) {
     auto jdata = Template_Construct(idx, sobj);
@@ -59,6 +117,7 @@ struct glTFAccessor {
     component_type = Scalar_To_glTFComponentType(jdata.componentType);
     max = jdata.max;
     min = jdata.min;
+    sparse_accessor = glTFSparseAccessor(jdata.sparse);
   }
 }
 
@@ -94,6 +153,7 @@ struct glTFAnimationChannel {
     target = glTFAnimationChannelTarget(obj, jdata.target);
   }
 }
+
 struct glTFAnimation {
   mixin glTFTemplate!JSON_glTFAnimationInfo;
   glTFAnimationSampler[] samplers;
@@ -106,13 +166,65 @@ struct glTFAnimation {
       channels ~= glTFAnimationChannel(cast(uint)t_idx, obj, i);
   }
 
+  private auto RData_From_Accessor(RObj)(RObj obj, uint input) {
+    auto accessor = &obj.accessors[input].gltf;
+    auto buffer_view = &obj.buffer_views[accessor.buffer_view].gltf;
+    auto data = obj.buffers[buffer_view.buffer].gltf;
+    return data;
+  }
+
   void Update(RObj)(RObj obj, float delta) {
+    import std.math : fmod;
+    // TODO: implement vec3, vec2, matrix & scalar (right now only vec4)
     foreach ( ref channel; channels ) {
       auto sampler = &samplers[channel.sampler];
-      auto accessor = &obj.accessors[sampler.input].gltf;
-      auto buffer_view = &obj.buffer_views[accessor.buffer_view].gltf;
-      auto data = obj.buffers[buffer_view.buffer].gltf.raw_data;
-      writeln(cast(float[])data);
+      auto input_data = cast(float[])obj.accessors[sampler.input].gltf.Load_Raw_Data(obj);
+      auto output_data = cast(float[])obj.accessors[sampler.output].gltf.Load_Raw_Data(obj);
+
+      float currentDelta = fmod(delta, input_data[$-1]);
+
+      float previousTime = -float.max, nextTime = float.max;
+      size_t previousIdx = -1, nextIdx = -1;
+
+      // TODO: optimize [not important until it becomes bottleneck]
+      // get index from delta for the input animation scalar/time data
+
+      foreach ( idx, timeStamp; input_data ) {
+        if ( previousTime < timeStamp && timeStamp < currentDelta ) {
+          previousTime = timeStamp;
+          previousIdx = idx;
+        }
+        if ( nextTime > timeStamp  && timeStamp > currentDelta ) {
+          nextTime = timeStamp;
+          nextIdx = idx;
+        }
+      }
+
+      float interpolationValue = (currentDelta - previousTime) / (nextTime - previousTime);
+
+      // get data we are going to modify
+      auto node = &obj.nodes[channel.target.node].gltf;
+      float[]* modifier;
+      if ( node.transform.peek!(glTFMatrix) != null ) {
+      } else {
+        auto matrix = node.transform.peek!(glTFTRSMatrix);
+        switch ( channel.target.path ) {
+          default: assert(false, "UNKNOWN ANIMATION: " ~ channel.target.path);
+          case "rotation":    modifier = &matrix.rotation;    break;
+          case "translation": modifier = &matrix.translation; break;
+          case "scale":       modifier = &matrix.scale;       break;
+        }
+      }
+
+      auto mix ( float prev, float next, float alpha ) {
+        // return prev*(1.0f-alpha) + alpha*next;
+        return prev + alpha*(next - prev);
+      }
+
+      float[] previousData = output_data[previousIdx*4 .. previousIdx*4+4],
+              nextData     = output_data[nextIdx    *4 .. nextIdx    *4+4];
+      foreach ( itr, ref data; *modifier )
+        data = mix(previousData[itr], nextData[itr], interpolationValue);
     }
   }
 }
@@ -130,6 +242,13 @@ struct glTFBuffer {
   mixin glTFTemplate!JSON_glTFBufferInfo;
   uint length;
   ubyte[] raw_data;
+
+  ubyte[] Load_From_Accessor(RObj)(RObj obj, ref glTFAccessor accessor) {
+    size_t length = accessor.count *
+                    glTFType_Info(accessor.type).count *
+                    glTFComponentType_Info(accessor.component_type).size;
+    return raw_data[accessor.offset .. accessor.offset + length];
+  }
 
   this(RObj)(uint idx, RObj obj, JSON_glTFConstruct sobj) {
     auto jdata = Template_Construct(idx, sobj);
@@ -153,6 +272,60 @@ struct glTFBufferView {
     length = jdata.byteLength;
     stride = jdata.byteStride;
     target = Scalar_To_glTFBufferViewTarget(jdata.target);
+  }
+
+  ubyte* BufferPtr(RObj)(RObj obj) {
+    return obj.buffers[buffer].gltf.raw_data.ptr + offset;
+  }
+
+  ubyte* BufferPtrWithAccessor(RObj)(RObj obj, glTFAccessor* accessor ) in {
+    assert(accessor !is null);
+  } body {
+    ubyte* data = BufferPtr(obj) + accessor.offset;
+    glTFSparseAccessor* sparse_accessor = accessor.RSparseAccessor;
+    if ( !sparse_accessor.Exists ) return data;
+
+    // sparse accessor, make a copy of the array & modify it
+    // TODO write a utility for this
+    {
+      ubyte* old_data = data;
+      data = cast(ubyte*)(new ubyte[length]);
+      foreach ( i; 0 .. length )
+        data[i] = old_data[i];
+    }
+    glTFSparseAccessorIndex* sparse_indices = &sparse_accessor.indices;
+    glTFSparseAccessorValue* sparse_values  = &sparse_accessor.values;
+
+    // TODO A sparse accessor differs from a regular one in that // bufferView property isn't
+    // required. When it's omitted, the sparse accessor is initialized as an array of zeros of size
+    // (size of the accessor element) * (accessor.count) bytes.
+    ubyte* indices_ptr = obj.buffer_views[sparse_indices.buffer_view].gltf.BufferPtr(obj)
+                          + 0;
+    ubyte* values_ptr  = obj.buffer_views[sparse_values.buffer_view ].gltf.BufferPtr(obj)
+                          + sparse_values.byte_offset;
+
+    // TODO accept values other than ushorts (sparse_indices.componentType)
+    assert(sparse_indices.component_type == glTFComponentType.Ushort,
+           "only ushort indices supported at the moment");
+    ushort* indices = cast(ushort*)indices_ptr;
+    // TODO accept values other than floats (accessor.componentType)
+    assert(accessor.componentType == glTFComponentType.Float,
+           "only float values for sparse indices supported at the moment");
+    float* values = cast(float*)values_ptr;
+    float* data_values = cast(float*)data;
+    // TODO assert count is valid here
+    // TODO support other than vec3 (accessor.type)
+    foreach ( i; 0 .. sparse_accessor.count ) {
+      // get length of vector if applicable
+      uint len = glTFType_Info(accessor.type).count;
+      // offset indices appropiately for vector
+      int didx = indices[i]*len;
+      int vidx = i*len;
+      // apply values to the data
+      foreach ( j; 0 .. len )
+        data_values[didx+j] = values[vidx+j];
+    }
+    return data;
   }
 }
 
@@ -260,7 +433,6 @@ struct glTFMaterialTexture {
 
   this(RObj)(RObj obj, JSON_glTFMaterialTextureInfo jdata) {
     Template_Construct(0, jdata);
-    writeln("IDX: ", jdata.index);
     texture = jdata.index;
   }
 
@@ -369,6 +541,12 @@ struct glTFNode {
     if ( !cond ) throw new Exception("Node '%s' %s".format(name, err));
   }
 
+  void Update(RObj)(RObj obj) {
+    // update children
+    foreach ( child_idx; children )
+      obj.nodes[child_idx].Update(obj);
+  }
+
   this(RObj)(uint idx, RObj obj, JSON_glTFConstruct sobj) {
     auto jdata = Template_Construct(idx, sobj);
     children = jdata.children.map!(i => cast(uint)i).array;
@@ -386,15 +564,19 @@ struct glTFNode {
       ]);
     } else if ( jdata.matrix.length == 0 ) {
       // fill in missing TRS
-      if ( jdata.translation.empty ) jdata.translation = [0f, 0f, 0f];
+      if ( jdata.translation.empty ) jdata.translation = [0f, 0f, 0f, 0f];
       if ( jdata.rotation.empty    ) jdata.rotation = [0f, 0f, 0f, 1f];
       if ( jdata.scale.empty       ) jdata.scale = [0f, 0f, 0f, 1f];
+      while ( jdata.translation.length < 4 ) jdata.translation ~= 0f;
+      while ( jdata.rotation.length    < 4 ) jdata.rotation    ~= 0f;
+      while ( jdata.scale.length       < 4 ) jdata.scale       ~= 0f;
       // -- create matrices from vectors
       transform = glTFTRSMatrix(jdata.translation, jdata.rotation, jdata.scale);
     } else {
       throw new Exception("Unsupported node-transformation matrix length of %s"
                            .format(jdata.matrix.length));
     }
+    writeln("TRANSFORM: ", transform);
   }
 }
 
