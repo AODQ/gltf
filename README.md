@@ -1,5 +1,7 @@
 # GL Transmission Format (glTF2) for D
 
+This project is no longer necessary, use https://github.com/jkuhlmann/cgltf instead.
+
 glTF2 is a specification by Khronos for transmitting and loading 3D scenes and
 models for applications. Read more: https://github.com/KhronosGroup/glTF
 
